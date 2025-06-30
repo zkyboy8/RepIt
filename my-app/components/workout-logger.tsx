@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -45,7 +45,7 @@ interface WorkoutTemplate {
 }
 
 export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSessionStart?: () => void, onSessionEnd?: () => void }) {
-  const { workouts, addWorkout, getPersonalBests, setCurrentWorkout, clearCurrentWorkout } = useWorkoutStore()
+  const { workouts, addWorkout, getPersonalBests, setCurrentWorkout, clearCurrentWorkout, currentWorkout } = useWorkoutStore()
   const { updateTrainingRecord } = usePersonalDataStore()
   const currentProgram = useTrainingProgramsStore((state) => state.currentProgram);
 
@@ -54,7 +54,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [workoutTime, setWorkoutTime] = useState(0)
-  const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null)
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const [showExerciseLibrary, setShowExerciseLibrary] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<WorkoutTemplate | null>(null)
   const [showTemplateDetail, setShowTemplateDetail] = useState(false)
@@ -355,7 +355,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
 
   // Get recommended workouts from active training program
   const recommendedWorkouts = (currentProgram?.weeks?.length ?? 0) > 0
-    ? currentProgram.weeks?.[0]?.sessions.map((session: any) => ({
+    ? currentProgram?.weeks?.[0]?.sessions.map((session: any) => ({
         id: `program-${session.name}`,
         name: `${session.name} (${currentProgram?.name ?? ''})`,
         description: session.notes || `Session from your training program`,
@@ -371,7 +371,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
           sets: [],
           notes: e.notes ?? '',
         })),
-      }))
+      })) ?? []
     : [];
 
   const allTemplates = [...recommendedWorkouts, ...workoutTemplates, ...previousWorkouts]
@@ -381,14 +381,14 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
     const interval = setInterval(() => {
       setWorkoutTime((prev) => prev + 1)
     }, 1000)
-    setTimerInterval(interval)
+    timerIntervalRef.current = interval
   }
 
   const pauseTimer = () => {
     setIsTimerRunning(false)
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      setTimerInterval(null)
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = null
     }
   }
 
@@ -498,6 +498,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
         date: new Date().toISOString(),
         duration: Math.floor(workoutTime / 60),
         exercises: exercises,
+        workoutTime: workoutTime,
       }
 
       console.log("Workout object created:", workout)
@@ -572,6 +573,11 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
     setShowWorkoutSummary(false)
     setCompletedWorkout(null)
     clearCurrentWorkout()
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = null
+    }
+    setIsTimerRunning(false)
     if (onSessionEnd) onSessionEnd()
   }
 
@@ -580,9 +586,9 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
     setWorkoutName("")
     setExercises([])
     setWorkoutTime(0)
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      setTimerInterval(null)
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = null
     }
     setIsTimerRunning(false)
     // Set current workout in store and trigger navigation
@@ -592,6 +598,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
       date: new Date().toISOString(),
       duration: 0,
       exercises: [],
+      workoutTime: 0,
     }
     setCurrentWorkout(newWorkout)
     if (onSessionStart) onSessionStart()
@@ -630,32 +637,46 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
     setShowTemplateDetail(true)
   }
 
-  const useTemplate = (template: WorkoutTemplate) => {
-    setWorkoutMode("new")
-    setWorkoutName(template.name.replace(" (Previous)", "").replace(` (${currentProgram?.name})`, ""))
-    setExercises([...template.exercises])
-    setWorkoutTime(0)
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      setTimerInterval(null)
+  // Helper to populate sets for each exercise from template
+  const populateSets = (exercise: Exercise) => {
+    const sets = [];
+    for (let i = 0; i < (exercise.targetSets || 0); i++) {
+      sets.push({
+        id: `${Date.now()}-${Math.random()}`,
+        weight: exercise.targetWeight,
+        reps: exercise.targetReps,
+        completed: false,
+      });
     }
-    setIsTimerRunning(false)
-    toast("Template Loaded")
-  }
+    return { ...exercise, sets };
+  };
+
+  const useTemplate = (template: WorkoutTemplate) => {
+    setWorkoutMode("new");
+    setWorkoutName(template.name.replace(" (Previous)", "").replace(` (${currentProgram?.name})`, ""));
+    setExercises(template.exercises.map(populateSets));
+    setWorkoutTime(0);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    setIsTimerRunning(false);
+    toast("Template Loaded");
+  };
 
   const handleUseTemplateClick = (template: WorkoutTemplate) => {
-    setWorkoutMode("new")
-    setWorkoutName(template.name.replace(" (Previous)", "").replace(` (${currentProgram?.name})`, ""))
-    setExercises([...template.exercises])
-    setWorkoutTime(0)
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      setTimerInterval(null)
+    setWorkoutMode("new");
+    setWorkoutName(template.name.replace(" (Previous)", "").replace(` (${currentProgram?.name})`, ""));
+    setExercises(template.exercises.map(populateSets));
+    setWorkoutTime(0);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
     }
-    setIsTimerRunning(false)
-    setShowTemplateDetail(false)
-    toast("Template Loaded")
-  }
+    setIsTimerRunning(false);
+    setShowTemplateDetail(false);
+    toast("Template Loaded");
+  };
 
   const handleCancelWorkout = () => {
     setShowCancelDialog(true)
@@ -685,10 +706,10 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
           setWorkoutMode("new")
           setWorkoutName(workout.name)
           setExercises(workout.exercises)
-          setWorkoutTime(0)
-          if (timerInterval) {
-            clearInterval(timerInterval)
-            setTimerInterval(null)
+          setWorkoutTime(workout.workoutTime || 0)
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current)
+            timerIntervalRef.current = null
           }
           setIsTimerRunning(false)
 
@@ -703,6 +724,57 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
       }
     }
   }, [])
+
+  // Restore session from persisted currentWorkout
+  useEffect(() => {
+    if (currentWorkout) {
+      setWorkoutMode("new");
+      setWorkoutName(currentWorkout.name || "");
+      setExercises(currentWorkout.exercises || []);
+      setWorkoutTime(currentWorkout.workoutTime || 0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkout]);
+
+  // Persist user input to currentWorkout in the store, but only if changed
+  const lastSyncedRef = useRef<{ name: string; exercises: Exercise[]; workoutTime: number } | null>(null);
+  useEffect(() => {
+    // Always run, but only update if in 'new' mode and values changed
+    if (workoutMode === "new") {
+      const last = lastSyncedRef.current;
+      const hasChanged =
+        !last || last.name !== workoutName || JSON.stringify(last.exercises) !== JSON.stringify(exercises) || last.workoutTime !== workoutTime;
+      if (hasChanged) {
+        setCurrentWorkout({
+          ...(currentWorkout || { id: `current-${Date.now()}`, date: new Date().toISOString(), duration: 0 }),
+          name: workoutName,
+          exercises: exercises,
+          workoutTime: workoutTime,
+        });
+        lastSyncedRef.current = { name: workoutName, exercises, workoutTime };
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workoutName, exercises, workoutTime, workoutMode, currentWorkout]);
+
+  // Automatically start timer when workoutMode is 'new'
+  useEffect(() => {
+    if (workoutMode === "new") {
+      setIsTimerRunning(true);
+      if (!timerIntervalRef.current) {
+        timerIntervalRef.current = setInterval(() => {
+          setWorkoutTime((prev) => prev + 1);
+        }, 1000);
+      }
+    } else {
+      setIsTimerRunning(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workoutMode]);
 
   if (workoutMode === "select") {
     return (
@@ -1117,17 +1189,12 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
             <div>
               <CardTitle>Workout Session</CardTitle>
               <CardDescription>Log your exercises and track your progress</CardDescription>
+              <div className="text-xs text-muted-foreground mt-1">
+                Started: {currentWorkout?.date ? new Date(currentWorkout.date).toLocaleString() : new Date().toLocaleString()}
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-2xl font-mono font-bold">{formatTime(((workoutTime) || 0))}</div>
-              <Button
-                onClick={isTimerRunning ? pauseTimer : startTimer}
-                variant={isTimerRunning ? "destructive" : "default"}
-                size="sm"
-              >
-                {isTimerRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {isTimerRunning ? "Pause" : "Start"}
-              </Button>
               <div className="relative">
                 <Button variant="outline" onClick={() => setShowOptions(!showOptions)}>
                   <MoreVertical className="h-5 w-5" />
@@ -1153,32 +1220,6 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
               onChange={(e) => setWorkoutName(e.target.value)}
             />
           </div>
-
-          <div className="flex gap-2">
-            <Button onClick={() => setShowExerciseLibrary(true)} className="flex-1">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Exercise
-            </Button>
-          </div>
-
-          <ExerciseSelector
-            isOpen={showExerciseLibrary}
-            onClose={() => setShowExerciseLibrary(false)}
-            onSelectExercise={(exercise) => {
-              // Add the selected exercise to the current workout with default values
-              const newExercise: Exercise = {
-                name: exercise.name,
-                targetSets: 3,
-                targetReps: 10,
-                targetWeight: undefined,
-                sets: [],
-                notes: `Added from exercise database`,
-              }
-              setExercises([...exercises, newExercise])
-              setShowExerciseLibrary(false)
-              toast("Exercise Added")
-            }}
-          />
         </CardContent>
       </Card>
 
@@ -1202,10 +1243,6 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
                         {((exercise.previousBest.reps) || 0)} reps
                       </Badge>
                     )}
-                    <Button onClick={() => addSet(exerciseIndex)} size="sm" variant="outline">
-                      <Plus className="h-3 w-3 mr-1" />
-                      Add Set
-                    </Button>
                     <Button
                       onClick={() => {
                         const newExercises = [...exercises]
@@ -1328,11 +1365,24 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
                     })
                   )}
                 </div>
+                <div className="flex justify-center mt-4">
+                  <Button onClick={() => addSet(exerciseIndex)} size="sm" variant="outline">
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Set
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <div>
+        <Button onClick={() => setShowExerciseLibrary(true)} className="w-full">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Exercise
+        </Button>
+      </div>
 
       {((exercises?.length) > 0) && (
         <Card>

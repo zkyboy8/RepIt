@@ -33,6 +33,7 @@ export interface Workout {
   date: string
   duration: number
   exercises: Exercise[]
+  workoutTime?: number // seconds elapsed for the current workout session
 }
 
 export interface WorkoutStore {
@@ -179,6 +180,10 @@ export const useWorkoutStore = create<WorkoutStore>()(
     }),
     {
       name: "workout-storage",
+      partialize: (state) => ({
+        workouts: state.workouts,
+        currentWorkout: state.currentWorkout,
+      }),
     },
   ),
 )
