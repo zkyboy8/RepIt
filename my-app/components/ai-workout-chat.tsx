@@ -220,11 +220,7 @@ export default function AIWorkoutChat() {
       setMessages((prev) => [...prev, aiResponse])
     } catch (error) {
       console.error("Error generating AI response:", error)
-      toast({
-        title: "Error",
-        description: "Failed to get AI response. Please try again.",
-        variant: "destructive",
-      })
+      toast("Failed to get AI response. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -256,10 +252,7 @@ export default function AIWorkoutChat() {
     // Switch to workout tab
     window.dispatchEvent(new CustomEvent("switchToWorkout"))
 
-    toast({
-      title: "Workout Loaded!",
-      description: `${workout.name} has been loaded in the workout tab`,
-    })
+    toast(`${workout.name} has been loaded in the workout tab`)
   }
 
   return (

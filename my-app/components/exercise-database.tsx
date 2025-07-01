@@ -433,10 +433,7 @@ export default function ExerciseDatabase() {
     }
 
     addWorkout(workout)
-    toast({
-      title: "Quick Workout Created!",
-      description: `${exercise.name} workout has been added to your history`,
-    })
+    toast(`${exercise.name} workout has been added to your history`)
   }
 
   return (

@@ -100,11 +100,7 @@ export default function PersonalInfo() {
 
   const handleMetricsSubmit = () => {
     if (metricsForm.height <= 0 || metricsForm.weight <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter valid height and weight",
-        variant: "destructive",
-      })
+      toast("Please enter valid height and weight")
       return
     }
 
@@ -116,19 +112,12 @@ export default function PersonalInfo() {
     })
 
     setShowMetricsDialog(false)
-    toast({
-      title: "Metrics Updated!",
-      description: "Your body metrics have been saved",
-    })
+    toast("Your body metrics have been saved")
   }
 
   const handleRecordSubmit = () => {
     if (!recordForm.exercise || recordForm.value <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter valid exercise and value",
-        variant: "destructive",
-      })
+      toast("Please enter valid exercise and value")
       return
     }
 
@@ -148,10 +137,7 @@ export default function PersonalInfo() {
       notes: "",
     })
     setShowRecordDialog(false)
-    toast({
-      title: "Record Added!",
-      description: `${recordForm.exercise} personal best has been saved`,
-    })
+    toast(`${recordForm.exercise} personal best has been saved`)
   }
 
   // Pre-populate form with latest metrics

@@ -104,20 +104,12 @@ export default function CustomExerciseCreator() {
     e.preventDefault()
 
     if (!formData.name.trim()) {
-      toast({
-        title: "Error",
-        description: "Exercise name is required",
-        variant: "destructive",
-      })
+      toast("Exercise name is required")
       return
     }
 
     if (formData.muscleGroups.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please select at least one muscle group",
-        variant: "destructive",
-      })
+      toast("Please select at least one muscle group")
       return
     }
 
@@ -137,10 +129,7 @@ export default function CustomExerciseCreator() {
 
     addCustomExercise(customExercise)
 
-    toast({
-      title: "Success!",
-      description: `${formData.name} has been added to your custom exercises`,
-    })
+    toast(`${formData.name} has been added to your custom exercises`)
 
     // Reset form
     setFormData({

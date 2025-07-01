@@ -25,16 +25,10 @@ export default function FavoriteButton({
   const handleToggleFavorite = () => {
     if (isFavorite) {
       removeFavoriteExercise(exerciseId)
-      toast({
-        title: "Removed from favorites",
-        description: `${exerciseName} has been removed from your favorites`,
-      })
+      toast(`${exerciseName} has been removed from your favorites`)
     } else {
       addFavoriteExercise(exerciseId)
-      toast({
-        title: "Added to favorites",
-        description: `${exerciseName} has been added to your favorites`,
-      })
+      toast(`${exerciseName} has been added to your favorites`)
     }
   }
 
