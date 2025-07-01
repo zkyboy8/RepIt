@@ -217,7 +217,7 @@ export default function GymApp() {
           </TabsContent>
 
           <TabsContent value="workout">
-            <WorkoutLogger />
+            <WorkoutLogger forceSelectMode={true} onSessionStart={() => setActiveTab("current-workout")} />
           </TabsContent>
 
           <TabsContent value="exercises">
@@ -238,7 +238,7 @@ export default function GymApp() {
 
           {currentWorkout && (
             <TabsContent value="current-workout">
-              <WorkoutLogger onSessionStart={() => setActiveTab("current-workout")} onSessionEnd={() => setActiveTab("dashboard")} />
+              <WorkoutLogger onSessionEnd={() => setActiveTab("dashboard")} />
             </TabsContent>
           )}
         </Tabs>

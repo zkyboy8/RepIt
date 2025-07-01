@@ -44,7 +44,7 @@ interface WorkoutTemplate {
   muscleGroups: string[]
 }
 
-export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSessionStart?: () => void, onSessionEnd?: () => void }) {
+export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelectMode }: { onSessionStart?: () => void, onSessionEnd?: () => void, forceSelectMode?: boolean }) {
   const { workouts, addWorkout, getPersonalBests, setCurrentWorkout, clearCurrentWorkout, currentWorkout } = useWorkoutStore()
   const { updateTrainingRecord } = usePersonalDataStore()
   const currentProgram = useTrainingProgramsStore((state) => state.currentProgram);
@@ -776,6 +776,18 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workoutMode]);
 
+  useEffect(() => {
+    if (forceSelectMode) {
+      setWorkoutMode('select');
+    }
+  }, [forceSelectMode]);
+
+  if (forceSelectMode) {
+    // Always render the select mode UI
+    // ... render the two options as in workoutMode === 'select' ...
+    if (workoutMode !== 'select') setWorkoutMode('select');
+  }
+
   if (workoutMode === "select") {
     return (
       <div className="space-y-6">
@@ -1502,6 +1514,17 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd }: { onSess
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {showExerciseLibrary && (
+        <ExerciseSelector
+          isOpen={showExerciseLibrary}
+          onClose={() => setShowExerciseLibrary(false)}
+          onSelectExercise={exercise => {
+            setExercises([...exercises, exercise]);
+            setShowExerciseLibrary(false);
+          }}
+        />
+      )}
     </div>
   )
 }
