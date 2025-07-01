@@ -64,6 +64,8 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
   const [completedWorkout, setCompletedWorkout] = useState<any>(null)
   const [showOptions, setShowOptions] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [now, setNow] = useState(Date.now());
+  const elapsed = currentWorkout?.startTime ? Math.floor((now - currentWorkout.startTime) / 1000) : 0;
 
   // Built-in workout templates
   const workoutTemplates: WorkoutTemplate[] = [
@@ -599,6 +601,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
       duration: 0,
       exercises: [],
       workoutTime: 0,
+      startTime: Date.now(),
     }
     setCurrentWorkout(newWorkout)
     if (onSessionStart) onSessionStart()
@@ -781,6 +784,16 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
       setWorkoutMode('select');
     }
   }, [forceSelectMode]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (workoutMode === 'new' && currentWorkout?.startTime) {
+      interval = setInterval(() => setNow(Date.now()), 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [workoutMode, currentWorkout?.startTime]);
 
   if (forceSelectMode) {
     // Always render the select mode UI
@@ -1206,7 +1219,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-2xl font-mono font-bold">{formatTime(((workoutTime) || 0))}</div>
+              <div className="text-2xl font-mono font-bold">{formatTime(elapsed)}</div>
               <div className="relative">
                 <Button variant="outline" onClick={() => setShowOptions(!showOptions)}>
                   <MoreVertical className="h-5 w-5" />

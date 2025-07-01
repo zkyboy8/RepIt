@@ -34,6 +34,7 @@ export interface Workout {
   duration: number
   exercises: Exercise[]
   workoutTime?: number // seconds elapsed for the current workout session
+  startTime?: number // timestamp when the workout started
 }
 
 export interface WorkoutStore {
