@@ -13,11 +13,13 @@ import ProgressTracker from "@/components/progress-tracker"
 import { useWorkoutStore } from "@/lib/workout-store"
 import ExerciseDatabase from "@/components/exercise-database"
 import TrainingPrograms from "@/components/training-programs"
+import { useRouter } from "next/navigation"
 
 export default function GymApp() {
   const { workouts, getWeeklyStats, getTodaysWorkout, currentWorkout, clearCurrentWorkout } = useWorkoutStore()
   const [activeTab, setActiveTab] = useState("dashboard")
   const [mounted, setMounted] = useState(false)
+  const router = useRouter()
 
   const weeklyStats = getWeeklyStats()
   const todaysWorkout = getTodaysWorkout()
@@ -217,7 +219,7 @@ export default function GymApp() {
           </TabsContent>
 
           <TabsContent value="workout">
-            <WorkoutLogger forceSelectMode={true} onSessionStart={() => setActiveTab("current-workout")} />
+            <WorkoutLogger onSessionStart={() => setActiveTab("current-workout")} onSessionEnd={() => setActiveTab("dashboard")} />
           </TabsContent>
 
           <TabsContent value="exercises">

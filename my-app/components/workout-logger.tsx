@@ -669,8 +669,10 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
 
   const handleUseTemplateClick = (template: WorkoutTemplate) => {
     setWorkoutMode("new");
-    setWorkoutName(template.name.replace(" (Previous)", "").replace(` (${currentProgram?.name})`, ""));
-    setExercises(template.exercises.map(populateSets));
+    const cleanName = template.name.replace(" (Previous)", "").replace(` (${currentProgram?.name})`, "");
+    const populatedExercises = template.exercises.map(populateSets);
+    setWorkoutName(cleanName);
+    setExercises(populatedExercises);
     setWorkoutTime(0);
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
@@ -678,6 +680,17 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
     }
     setIsTimerRunning(false);
     setShowTemplateDetail(false);
+    // Create a new workout object with a fresh startTime
+    const newWorkout = {
+      id: `current-${Date.now()}`,
+      name: cleanName,
+      date: new Date().toISOString(),
+      duration: 0,
+      exercises: populatedExercises,
+      workoutTime: 0,
+      startTime: Date.now(),
+    };
+    setCurrentWorkout(newWorkout);
     toast("Template Loaded");
   };
 
