@@ -74,8 +74,11 @@ export default function TrainingPrograms() {
   }
 
   const handleStartProgram = (programId: string) => {
-    // Implementation of handleStartProgram
-    toast('Program Started!')
+    const program = programs.find((p) => p.id === programId)
+    if (program) {
+      setCurrentProgram(program)
+      toast('Program Started!')
+    }
   }
 
   const handleCompleteSession = (programId: string, week: number, sessionIndex: number) => {

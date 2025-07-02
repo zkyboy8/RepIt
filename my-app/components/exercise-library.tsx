@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ import CustomExerciseCreator from "@/components/custom-exercise-creator"
 import FavoriteButton from "@/components/favorite-button"
 import { useCustomExerciseStore } from "@/lib/custom-exercise-store"
 import { useFavoritesStore } from "@/lib/favorites-store"
+import { getExercises as fetchSupabaseExercises } from "@/lib/supabase-exercises"
 
 interface Exercise {
   id: string
@@ -45,6 +46,7 @@ export default function ExerciseLibrary({ open, onClose, onSelectExercise }: Exe
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null)
+  const [allExercises, setAllExercises] = useState<Exercise[]>([])
 
   const { customExercises } = useCustomExerciseStore()
   const { favoriteExercises, getFavoriteCount } = useFavoritesStore()
@@ -236,8 +238,21 @@ export default function ExerciseLibrary({ open, onClose, onSelectExercise }: Exe
     },
   ]
 
-  // Combine built-in and custom exercises
-  const allExercises = [...builtInExercises, ...customExercises]
+  useEffect(() => {
+    async function loadExercises() {
+      try {
+        const supaExercises = await fetchSupabaseExercises()
+        if (supaExercises && supaExercises.length > 0) {
+          setAllExercises(supaExercises)
+        } else {
+          setAllExercises(builtInExercises)
+        }
+      } catch (e) {
+        setAllExercises(builtInExercises)
+      }
+    }
+    loadExercises()
+  }, [])
 
   const categories = ["all", "Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "Custom"]
 

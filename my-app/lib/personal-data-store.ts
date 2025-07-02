@@ -2,6 +2,9 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { getBodyMetrics, addBodyMetric, updateBodyMetric, deleteBodyMetric } from './supabase-body-metrics'
+import { getTrainingRecords, addTrainingRecord, updateTrainingRecord, deleteTrainingRecord } from './supabase-training-records'
+import { supabase } from './supabase'
 
 export interface BodyMetrics {
   date: string
@@ -50,7 +53,21 @@ interface PersonalDataStore {
   getWeightChartData: () => { date: string; weight: number }[]
   getBodyFatChartData: () => { date: string; bodyFat: number }[]
   getBMIChartData: () => { date: string; bmi: number }[]
+
+  // Supabase operations
+  fetchBodyMetricsFromSupabase: (user_id?: string) => Promise<void>
+  updateBodyMetrics: (id: string, updates: Partial<BodyMetrics>) => Promise<void>
+  deleteBodyMetrics: (id: string) => Promise<void>
+  fetchTrainingRecordsFromSupabase: (user_id?: string) => Promise<void>
+  deleteTrainingRecord: (id: string) => Promise<void>
+
+  // Real-time sync
+  subscribeToBodyMetricsChanges: (user_id?: string) => void
+  subscribeToTrainingRecordsChanges: (user_id?: string) => void
 }
+
+let bodyMetricsChannel: any = null;
+let trainingRecordsChannel: any = null;
 
 export const usePersonalDataStore = create<PersonalDataStore>()(
   persist(
@@ -63,20 +80,38 @@ export const usePersonalDataStore = create<PersonalDataStore>()(
         experienceLevel: "Beginner",
       },
 
-      addBodyMetrics: (metrics) => {
-        const newMetrics: BodyMetrics = {
+      // Fetch body metrics from Supabase on initialization
+      async fetchBodyMetricsFromSupabase(user_id?: string) {
+        const metrics = await getBodyMetrics(user_id)
+        set({ bodyMetrics: metrics })
+      },
+
+      addBodyMetrics: async (metrics) => {
+        const newMetrics = {
           ...metrics,
           date: new Date().toISOString(),
         }
-
-        // Calculate BMI if height and weight are provided
         if (metrics.height && metrics.weight) {
           const heightInMeters = metrics.height / 100
           newMetrics.bmi = Number((metrics.weight / (heightInMeters * heightInMeters)).toFixed(1))
         }
-
+        const saved = await addBodyMetric(newMetrics)
         set((state) => ({
-          bodyMetrics: [newMetrics, ...state.bodyMetrics],
+          bodyMetrics: [saved, ...state.bodyMetrics],
+        }))
+      },
+
+      updateBodyMetrics: async (id, updates) => {
+        const updated = await updateBodyMetric(id, updates)
+        set((state) => ({
+          bodyMetrics: state.bodyMetrics.map((m) => (m.id === id ? { ...m, ...updated } : m)),
+        }))
+      },
+
+      deleteBodyMetrics: async (id) => {
+        await deleteBodyMetric(id)
+        set((state) => ({
+          bodyMetrics: state.bodyMetrics.filter((m) => m.id !== id),
         }))
       },
 
@@ -99,41 +134,36 @@ export const usePersonalDataStore = create<PersonalDataStore>()(
           .reverse()
       },
 
-      addTrainingRecord: (record) => {
-        const newRecord: TrainingRecord = {
-          ...record,
-          id: Date.now().toString(),
-          date: new Date().toISOString(),
-        }
-
-        set((state) => ({
-          trainingRecords: [newRecord, ...state.trainingRecords],
-        }))
+      // Fetch training records from Supabase on initialization
+      async fetchTrainingRecordsFromSupabase(user_id?: string) {
+        const records = await getTrainingRecords(user_id);
+        set({ trainingRecords: records });
       },
 
-      updateTrainingRecord: (record) => {
-        const newRecord: TrainingRecord = {
+      addTrainingRecord: async (record) => {
+        const newRecord = {
           ...record,
           id: Date.now().toString(),
           date: new Date().toISOString(),
-        }
+        };
+        const saved = await addTrainingRecord(newRecord);
+        set((state) => ({
+          trainingRecords: [saved, ...state.trainingRecords],
+        }));
+      },
 
-        set((state) => {
-          // Check if this is a new personal best
-          const existingRecords = state.trainingRecords.filter(
-            (r) => r.exercise === record.exercise && r.category === record.category,
-          )
+      updateTrainingRecord: async (id, updates) => {
+        const updated = await updateTrainingRecord(id, updates);
+        set((state) => ({
+          trainingRecords: state.trainingRecords.map((r) => (r.id === id ? { ...r, ...updated } : r)),
+        }));
+      },
 
-          const isNewBest = existingRecords.length === 0 || existingRecords.every((r) => r.value < record.value)
-
-          if (isNewBest) {
-            return {
-              trainingRecords: [newRecord, ...state.trainingRecords],
-            }
-          }
-
-          return state
-        })
+      deleteTrainingRecord: async (id) => {
+        await deleteTrainingRecord(id);
+        set((state) => ({
+          trainingRecords: state.trainingRecords.filter((r) => r.id !== id),
+        }));
       },
 
       getPersonalBests: () => {
@@ -184,6 +214,45 @@ export const usePersonalDataStore = create<PersonalDataStore>()(
           .filter((m) => m.bmi !== undefined)
           .map((m) => ({ date: m.date, bmi: m.bmi as number }))
           .reverse()
+      },
+
+      subscribeToBodyMetricsChanges: (user_id?: string) => {
+        if (bodyMetricsChannel) bodyMetricsChannel.unsubscribe();
+        bodyMetricsChannel = supabase
+          .channel('public:body_metrics')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'body_metrics', filter: user_id ? `user_id=eq.${user_id}` : undefined },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                set((state) => ({ bodyMetrics: [payload.new, ...state.bodyMetrics] }));
+              } else if (payload.eventType === 'UPDATE') {
+                set((state) => ({ bodyMetrics: state.bodyMetrics.map((m) => (m.id === payload.new.id ? payload.new : m)) }));
+              } else if (payload.eventType === 'DELETE') {
+                set((state) => ({ bodyMetrics: state.bodyMetrics.filter((m) => m.id !== payload.old.id) }));
+              }
+            }
+          )
+          .subscribe();
+      },
+      subscribeToTrainingRecordsChanges: (user_id?: string) => {
+        if (trainingRecordsChannel) trainingRecordsChannel.unsubscribe();
+        trainingRecordsChannel = supabase
+          .channel('public:training_records')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'training_records', filter: user_id ? `user_id=eq.${user_id}` : undefined },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                set((state) => ({ trainingRecords: [payload.new, ...state.trainingRecords] }));
+              } else if (payload.eventType === 'UPDATE') {
+                set((state) => ({ trainingRecords: state.trainingRecords.map((r) => (r.id === payload.new.id ? payload.new : r)) }));
+              } else if (payload.eventType === 'DELETE') {
+                set((state) => ({ trainingRecords: state.trainingRecords.filter((r) => r.id !== payload.old.id) }));
+              }
+            }
+          )
+          .subscribe();
       },
     }),
     {

@@ -2,6 +2,8 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { getWorkouts as supaGetWorkouts, addWorkout as supaAddWorkout, deleteWorkout as supaDeleteWorkout } from './supabase-workouts'
+import { supabase } from './supabase'
 
 export interface ExerciseSet {
   id: string
@@ -59,28 +61,36 @@ export interface WorkoutStore {
   currentWorkout: Workout | null
   setCurrentWorkout: (workout: Workout) => void
   clearCurrentWorkout: () => void
+  fetchWorkoutsFromSupabase: (user_id?: string) => Promise<void>
+  subscribeToWorkoutChanges: (user_id?: string) => void
 }
+
+let workoutChannel: any = null;
 
 export const useWorkoutStore = create<WorkoutStore>()(
   persist(
     (set, get) => ({
       workouts: [],
 
-      addWorkout: (workout) => {
-        console.log("Adding workout:", workout)
-        set((state) => {
-          const newState = {
-            workouts: [workout, ...state.workouts],
-          }
-          console.log("New workout state:", newState)
-          return newState
-        })
+      // Fetch workouts from Supabase on initialization
+      async fetchWorkoutsFromSupabase(user_id?: string) {
+        const workouts = await supaGetWorkouts(user_id);
+        set({ workouts });
       },
 
-      removeWorkout: (id) => {
+      addWorkout: async (workout) => {
+        // Add to Supabase
+        const saved = await supaAddWorkout(workout);
+        set((state) => ({
+          workouts: [saved, ...state.workouts],
+        }));
+      },
+
+      removeWorkout: async (id) => {
+        await supaDeleteWorkout(id);
         set((state) => ({
           workouts: state.workouts.filter((w) => w.id !== id),
-        }))
+        }));
       },
 
       getWeeklyStats: () => {
@@ -178,6 +188,34 @@ export const useWorkoutStore = create<WorkoutStore>()(
       currentWorkout: null,
       setCurrentWorkout: (workout) => set(() => ({ currentWorkout: workout })),
       clearCurrentWorkout: () => set(() => ({ currentWorkout: null })),
+
+      subscribeToWorkoutChanges: (user_id?: string) => {
+        if (workoutChannel) {
+          workoutChannel.unsubscribe();
+        }
+        workoutChannel = supabase
+          .channel('public:workouts')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'workouts', filter: user_id ? `user_id=eq.${user_id}` : undefined },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                set((state) => ({
+                  workouts: [payload.new, ...state.workouts],
+                }));
+              } else if (payload.eventType === 'UPDATE') {
+                set((state) => ({
+                  workouts: state.workouts.map((w) => (w.id === payload.new.id ? payload.new : w)),
+                }));
+              } else if (payload.eventType === 'DELETE') {
+                set((state) => ({
+                  workouts: state.workouts.filter((w) => w.id !== payload.old.id),
+                }));
+              }
+            }
+          )
+          .subscribe();
+      },
     }),
     {
       name: "workout-storage",

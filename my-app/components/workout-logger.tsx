@@ -44,7 +44,7 @@ interface WorkoutTemplate {
   muscleGroups: string[]
 }
 
-export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelectMode }: { onSessionStart?: () => void, onSessionEnd?: () => void, forceSelectMode?: boolean }) {
+export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelectMode, onBrowseTrainingPrograms }: { onSessionStart?: () => void, onSessionEnd?: () => void, forceSelectMode?: boolean, onBrowseTrainingPrograms?: () => void }) {
   const { workouts, addWorkout, getPersonalBests, setCurrentWorkout, clearCurrentWorkout, currentWorkout } = useWorkoutStore()
   const { updateTrainingRecord } = usePersonalDataStore()
   const currentProgram = useTrainingProgramsStore((state) => state.currentProgram);
@@ -425,21 +425,24 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
   }
 
   const addSet = (exerciseIndex: number) => {
-    const exercise = exercises[exerciseIndex]
+    const exercise = exercises[exerciseIndex];
+    // Defensive: ensure sets is always an array
+    if (!Array.isArray(exercise.sets)) {
+      exercise.sets = [];
+    }
     const newSet: ExerciseSet = {
       id: `${Date.now()}-${Math.random()}`,
       weight: exercise.targetWeight,
       reps: exercise.targetReps,
       completed: false,
-    }
-
-    const updatedExercises = [...exercises]
+    };
+    const updatedExercises = [...exercises];
     updatedExercises[exerciseIndex] = {
       ...exercise,
       sets: [...exercise.sets, newSet],
-    }
-    setExercises(updatedExercises)
-  }
+    };
+    setExercises(updatedExercises);
+  };
 
   const updateSet = (exerciseIndex: number, setIndex: number, updates: Partial<ExerciseSet>) => {
     const updatedExercises = [...exercises]
@@ -462,74 +465,44 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
     setExercises(updatedExercises)
   }
 
-  const saveWorkout = () => {
-    console.log("Save workout clicked")
-    console.log("Workout name:", workoutName)
-    console.log("Exercises:", exercises)
-
-    // Fix: Check for empty string specifically
-    if (!workoutName.trim() || ((exercises?.length || 0) === 0)) {
-      console.log("Validation failed: missing name or exercises")
-      toast("Please add a workout name and at least one exercise")
-      return
-    }
-
-    // Check if any sets are completed
-    const hasCompletedSets = ((exercises?.some((exercise) => ((exercise.sets ?? []).some((set) => set.completed)) || false))) || false
-    console.log("Has completed sets:", hasCompletedSets)
-
-    if (!hasCompletedSets) {
-      console.log("Validation failed: no completed sets")
-      toast("Please complete at least one set before saving")
-      return
-    }
-
-    console.log("Validation passed, proceeding to save...")
-
+  const saveWorkout = async () => {
     try {
-      pauseTimer()
-
-      // Clear all rest timers
-      Object.values(restIntervals).forEach((interval) => clearInterval(interval))
-      setRestTimers({})
-      setRestIntervals({})
-
       const workout = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         name: workoutName.trim(),
         date: new Date().toISOString(),
         duration: Math.floor(workoutTime / 60),
         exercises: exercises,
         workoutTime: workoutTime,
-      }
+      };
 
-      console.log("Workout object created:", workout)
+      console.log("Workout object created:", workout);
 
-      // Save workout to store
-      addWorkout(workout)
-      console.log("Workout added to store")
+      // Save workout to store and Supabase
+      await addWorkout(workout); // Await the async call
+      console.log("Workout added to store and Supabase");
 
       // Calculate workout summary
-      const totalSets = (exercises ?? []).reduce((sum, ex) => sum + ((ex.sets ?? []).filter((s) => s.completed).length), 0)
-      const totalVolume = (exercises ?? []).reduce((sum, ex) => sum + ((ex.sets ?? []).filter((s) => s.completed).reduce((setSum, set) => setSum + ((set.weight || 0) * set.reps), 0)), 0)
+      const totalSets = (exercises ?? []).reduce((sum, ex) => sum + ((ex.sets ?? []).filter((s) => s.completed).length), 0);
+      const totalVolume = (exercises ?? []).reduce((sum, ex) => sum + ((ex.sets ?? []).filter((s) => s.completed).reduce((setSum, set) => setSum + ((set.weight || 0) * set.reps), 0)), 0);
 
-      console.log("Summary calculated - Sets:", totalSets, "Volume:", totalVolume)
+      console.log("Summary calculated - Sets:", totalSets, "Volume:", totalVolume);
 
       // Check for new personal bests and update training records
-      const personalBests = getPersonalBests()
-      const newPersonalBests: string[] = []
+      const personalBests = getPersonalBests();
+      const newPersonalBests: string[] = [];
 
       exercises?.forEach((exercise) => {
         (exercise.sets ?? []).forEach((set) => {
           if (set.completed) {
-            const currentBest = personalBests[exercise.name]
+            const currentBest = personalBests[exercise.name];
             const isNewBest =
               !currentBest ||
               ((set.weight && (!currentBest.weight || set.weight > currentBest.weight)) || false) ||
-              ((!set.weight && set.reps > currentBest.reps) || false)
+              ((!set.weight && set.reps > currentBest.reps) || false);
 
             if (isNewBest) {
-              newPersonalBests.push(exercise.name)
+              newPersonalBests.push(exercise.name);
               // Update training records for strength exercises
               if (set.weight) {
                 updateTrainingRecord({
@@ -538,14 +511,14 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
                   value: set.weight,
                   unit: "kg",
                   notes: `${set.reps} reps - New PR from workout!`,
-                })
+                });
               }
             }
           }
-        })
-      })
+        });
+      });
 
-      console.log("New personal bests:", newPersonalBests)
+      console.log("New personal bests:", newPersonalBests);
 
       // Set completed workout for summary
       setCompletedWorkout({
@@ -553,18 +526,19 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
         totalSets,
         totalVolume,
         newPersonalBests,
-      })
+      });
 
       // Show workout summary
-      setShowWorkoutSummary(true)
-      console.log("Showing workout summary")
+      setShowWorkoutSummary(true);
+      console.log("Showing workout summary");
 
-      toast("Workout Saved!")
+      toast("Workout Saved!");
     } catch (error) {
-      console.error("Error saving workout:", error)
-      toast("Failed to save workout. Please try again.")
+      const err = error as any;
+      console.error("Error saving workout:", err, JSON.stringify(err), err?.message, err?.stack);
+      toast("Failed to save workout. Please try again.");
     }
-  }
+  };
 
   const finishWorkout = () => {
     // Reset form
@@ -990,7 +964,7 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
                   <p className="text-muted-foreground mb-4">
                     Start a training program to get personalized workout recommendations.
                   </p>
-                  <Button variant="outline">Browse Training Programs</Button>
+                  <Button variant="outline" onClick={onBrowseTrainingPrograms}>Browse Training Programs</Button>
                 </CardContent>
               </Card>
             )}
@@ -1435,8 +1409,8 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
 
       {/* Workout Summary Modal */}
       <Dialog open={showWorkoutSummary} onOpenChange={setShowWorkoutSummary}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader className="px-6 pt-6">
             <DialogTitle className="flex items-center gap-2">
               <Trophy className="h-5 w-5 text-yellow-500" />
               Workout Complete!
@@ -1445,86 +1419,88 @@ export default function WorkoutLogger({ onSessionStart, onSessionEnd, forceSelec
           </DialogHeader>
 
           {completedWorkout && (
-            <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{((completedWorkout.duration) || 0)}</div>
-                      <div className="text-sm text-muted-foreground">Minutes</div>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{((completedWorkout.totalSets) || 0)}</div>
-                      <div className="text-sm text-muted-foreground">Sets Completed</div>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{Math.round(((completedWorkout.totalVolume) || 0))}</div>
-                      <div className="text-sm text-muted-foreground">Total Volume (kg)</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            <ScrollArea className="max-h-[70vh] px-6 pb-6">
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{((completedWorkout.duration) || 0)}</div>
+                        <div className="text-sm text-muted-foreground">Minutes</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{((completedWorkout.totalSets) || 0)}</div>
+                        <div className="text-sm text-muted-foreground">Sets Completed</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{Math.round(((completedWorkout.totalVolume) || 0))}</div>
+                        <div className="text-sm text-muted-foreground">Total Volume (kg)</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-              {((completedWorkout.newPersonalBests?.length) > 0) && (
+                {((completedWorkout.newPersonalBests?.length) > 0) && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-yellow-500" />
+                        New Personal Bests!
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {((completedWorkout.newPersonalBests) || []).map((exercise: string, index: number) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-950 rounded"
+                          >
+                            <Trophy className="h-4 w-4 text-yellow-500" />
+                            <span className="font-medium">{exercise}</span>
+                            <Badge variant="secondary">New PR!</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Trophy className="h-5 w-5 text-yellow-500" />
-                      New Personal Bests!
-                    </CardTitle>
+                    <CardTitle>Exercises Completed</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {((completedWorkout.newPersonalBests) || []).map((exercise: string, index: number) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-950 rounded"
-                        >
-                          <Trophy className="h-4 w-4 text-yellow-500" />
-                          <span className="font-medium">{exercise}</span>
-                          <Badge variant="secondary">New PR!</Badge>
+                      {((completedWorkout.exercises) || []).map((exercise: Exercise, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-2 border rounded">
+                          <span className="font-medium">{exercise.name}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {((exercise.sets?.filter((s) => s.completed))?.length || 0)} sets completed
+                          </span>
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
-              )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Exercises Completed</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {((completedWorkout.exercises) || []).map((exercise: Exercise, index: number) => (
-                      <div key={index} className="flex items-center justify-between p-2 border rounded">
-                        <span className="font-medium">{exercise.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {((exercise.sets?.filter((s) => s.completed))?.length || 0)} sets completed
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex gap-2">
-                <Button onClick={finishWorkout} className="flex-1">
-                  Finish & Return Home
-                </Button>
-                <Button variant="outline" onClick={() => setShowWorkoutSummary(false)}>
-                  Close Summary
-                </Button>
+                <div className="flex gap-2 pt-2">
+                  <Button onClick={finishWorkout} className="flex-1">
+                    Finish & Return Home
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowWorkoutSummary(false)}>
+                    Close Summary
+                  </Button>
+                </div>
               </div>
-            </div>
+            </ScrollArea>
           )}
         </DialogContent>
       </Dialog>

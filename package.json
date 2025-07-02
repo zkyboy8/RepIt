@@ -1,7 +1,9 @@
 {
   "dependencies": {
+    "@supabase/supabase-js": "^2.50.2",
     "lodash": "^4.17.21",
-    "lodash.isequal": "^4.5.0"
+    "lodash.isequal": "^4.5.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/lodash.isequal": "^4.5.8"

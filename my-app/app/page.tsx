@@ -14,6 +14,10 @@ import { useWorkoutStore } from "@/lib/workout-store"
 import ExerciseDatabase from "@/components/exercise-database"
 import TrainingPrograms from "@/components/training-programs"
 import { useRouter } from "next/navigation"
+import { useCustomExerciseStore } from "@/lib/custom-exercise-store"
+import { usePersonalDataStore } from "@/lib/personal-data-store"
+import { useFavoritesStore } from "@/lib/favorites-store"
+import { useTrainingProgramsStore } from "@/lib/training-programs-store"
 
 export default function GymApp() {
   const { workouts, getWeeklyStats, getTodaysWorkout, currentWorkout, clearCurrentWorkout } = useWorkoutStore()
@@ -23,6 +27,9 @@ export default function GymApp() {
 
   const weeklyStats = getWeeklyStats()
   const todaysWorkout = getTodaysWorkout()
+
+  // Replace with actual user id if you have auth
+  const userId = null;
 
   useEffect(() => {
     const handleSwitchToWorkout = () => {
@@ -43,6 +50,15 @@ export default function GymApp() {
       setActiveTab("dashboard")
     }
   }, [currentWorkout, activeTab])
+
+  useEffect(() => {
+    useWorkoutStore.getState().subscribeToWorkoutChanges(userId);
+    useCustomExerciseStore.getState().subscribeToCustomExerciseChanges();
+    usePersonalDataStore.getState().subscribeToBodyMetricsChanges(userId);
+    usePersonalDataStore.getState().subscribeToTrainingRecordsChanges(userId);
+    useFavoritesStore.getState().subscribeToFavoritesChanges(userId);
+    useTrainingProgramsStore.getState().subscribeToTrainingProgramsChanges(userId);
+  }, [userId]);
 
   if (!mounted) return null
 
@@ -219,7 +235,11 @@ export default function GymApp() {
           </TabsContent>
 
           <TabsContent value="workout">
-            <WorkoutLogger onSessionStart={() => setActiveTab("current-workout")} onSessionEnd={() => setActiveTab("dashboard")} />
+            <WorkoutLogger 
+              onSessionStart={() => setActiveTab("current-workout")}
+              onSessionEnd={() => setActiveTab("dashboard")}
+              onBrowseTrainingPrograms={() => setActiveTab("training")}
+            />
           </TabsContent>
 
           <TabsContent value="exercises">
@@ -240,7 +260,7 @@ export default function GymApp() {
 
           {currentWorkout && (
             <TabsContent value="current-workout">
-              <WorkoutLogger onSessionEnd={() => setActiveTab("dashboard")} />
+              <WorkoutLogger onSessionEnd={() => setActiveTab("dashboard")} onBrowseTrainingPrograms={() => setActiveTab("training")} />
             </TabsContent>
           )}
         </Tabs>
